@@ -1,178 +1,41 @@
-# Project 1: reproduce the final project's image encoder
+# 小项目 1：NumPy 图像特征提取
 
-Given images and learned model parameters **theta**, implement the OpenCLIP
-ViT-B-32 **forward calculation in NumPy**. Your output must numerically match
-the supplied reference. The same completed encoder becomes the image tower of
-`szu_python_openclip` in the final project. No model learning is required.
+用基础 NumPy 补全课程提供的 OpenCLIP ViT-B-32 视觉前向。图像经预处理形成 FP32 [B,3,224,224]；输出 [B,512] 的单位特征向量，保存为包含 ids 与 output_tokens 的 NPZ。内部 [B,50,768] token 序列不等于最终特征。无需 GPU、训练、PyTorch 或 OpenCLIP 软件包。
 
-## Input and output
+## 环境与数据
 
-- Input to `ImageEncoder`: float32 array **[B,3,224,224]** after the supplied preprocessing.
-- Internal image-token array after 12 blocks: **[B,50,768]** (CLS plus 49 patch tokens).
-- Final **output token**: float32 **[B,512]**, one normalized numerical row per image.
-  This is exactly the output of the final project's `ImageEncoder.__call__`.
+- Python 3.9+；实测 Windows / Python 3.12.10 / NumPy 2.2.6 / Pillow 12.3.0 / imageio 2.37.4。imageio 仅用于课程演示。
+- assets/ 包含课程随包的 10 张图、来源及顺序清单、独立 FP32 参考输出。参考数组只用于验证。
+- 权重从畅课的 **project1-学生版.zip** 获取。解压到独立目录，将其中 **project1-numpy-student/weights/image_encoder.npz** 复制到本仓库的 **weights/image_encoder.npz**。文件约 311 MiB，保留本地、不进 Git；check.py 的 assets 阶段会核对权重与数据指纹，具体 SHA-256 见 weights/manifest.json。
+- 课程演示、讲义映射及练习 PDF 随原始框架保留，本次任务完成对象为 image_encoder.py 的 6 组填空。
 
-The term output token in this assignment means the final 512-value row.
-`last_tokens` separately names the complete 50-row internal sequence.
+## 运行
 
+在仓库根目录运行（PowerShell）：
 
-## Files in this attachment
-
-Unzip the attachment and open this directory. Commands in this README run from
-this directory; Python resolves model/image files relative to the scripts.
-No absolute course-directory path is required.
-
-- `practice/project1_exercises.pdf`: 12 NumPy practice questions, without answers.
-- `lecture-demos/`: the NumPy classroom examples and the credited local cat image.
-- `transformer_steps.py`: the supplied miniature block companion.
-- `PPT-CODE-MAP.txt`: the current 76-slide lecture map.
-- `SOURCE-MANIFEST.json`: provenance, SHA-256 and intentional packaging changes.
-
-The assignment needs NumPy and Pillow. The imageio classroom example also needs
-imageio; the attachment requirements include all three.
-
-## Quick start
-
-Use Python 3.9 or later. No GPU, PyTorch, OpenCLIP package or network is needed.
-
-```bash
+~~~powershell
 python -m pip install -r requirements.txt
-python check.py --stage assets
-python check.py --stage preprocess
-python check.py --stage patches
-```
-
-The first two checks pass in the untouched starter. Later checks report the
-first missing TODO instead of pretending the starter is complete. After filling
-the six exercises:
-
-```bash
+$env:OPENBLAS_NUM_THREADS = '4'
 python check.py --stage all
-python run.py --output output_tokens.npz
-python run.py --images path/to/a.jpg path/to/b.png --output my_tokens.npz
-```
+python run.py --output evidence/output_tokens.npz
+python evidence/inspect_output.py
+python run.py --images assets/images/image_02.jpg assets/images/image_01.jpg --output output_tokens.npz
+~~~
 
-Run scripts from any directory by using their full paths if needed. `run.py`
-saves image IDs and output tokens in the same order as its inputs.
+自选图片按命令行顺序处理；不指定图片时使用随包的 10 张图。check.py 的 --stage 支持 assets、preprocess、patches、tokens、block0、last_tokens、output 和 batch，可逐层定位问题。
 
-## Follow the lecture's calculation
+## 文件结构
 
-```bash
-python transformer_steps.py
-```
+- **image_encoder.py**：6 组、10 处实现。切块、拆头与合头、注意力投影、两条残差和 MLP、加 CLS 与位置向量、末层 CLS 池化与投影。
+- **preprocess_image.py / helpers.py**：课程提供的预处理、LayerNorm、稳定 softmax、erf GELU 和单位化。
+- **runtime.py / run.py / check.py**：课程提供的读取、导出与检查入口。
+- **config.json / weights/manifest.json / assets/**：架构配置、权重指纹、图片与独立参考。
+- **evidence/**：检查日志、生成的向量、导出核验和错误切块反例。
+- **report/**：LaTeX 源码；进入该目录用 XeLaTeX 编译两次或运行 Tectonic。见 [实验报告 PDF](output/pdf/project1-report.pdf)。
+- **lecture-demos/ / practice/**：随包课堂材料。
 
-This supplied companion illustrates the arithmetic explained on slides 46-66:
-row means, centering, variance, Norm scale/bias, q/k/v, scores, coefficients,
-weighted values, attention projection, both residuals and the MLP. The lecture
-uses full image-array shapes; the companion prints a miniature calculation.
-The example uses **three token rows, four features, one head and six MLP middle
-values**. Its synthetic parameters keep all values visible. It is not the
-learned checkpoint. Display values round to two decimals; calculations retain
-full float32 precision.
+## 验证结果
 
-Transfer the arithmetic to the real shapes and TODOs in `image_encoder.py`.
-The Norm 2 result is named `u`, matching the assessed encoder.
-The miniature uses a 2D table, so `k.T` swaps its two axes. Real k is 4D:
-exchange only its final two axes and preserve image/head groups. Study and
-implement head organization independently. The companion leaves that part out.
-The real model still uses the exact supplied image parameters and reference
-outputs. All six assessed exercise groups remain incomplete.
+课程检查 8 个阶段全部通过。受检预处理和切块与参考完全相同；10 张图最终特征最大绝对误差 5.662e-7，平均绝对误差 8.688e-8，最大单位范数偏差 1.192e-7。换序与重复输入检查通过。直接 reshape 的形状虽正确，但首图第一块有 3002/3072 个值不同，不能仅用形状验证像素顺序。
 
-Slides 67-70 separate the final output into CLS selection, CLS post-Norm,
-output projection and unit-length scaling. Slides 71-73 collect the encoder
-contract, six implementation tasks, classroom commands and numerical checks.
-Slides 74-76 explain final-project reuse and the text extension.
-The current lecture contains 76 slides.
-
-## What to implement
-
-Edit **image_encoder.py** only. A single exercise can have several marked steps.
-
-| Exercise | Method | Required result |
-| --- | --- | --- |
-| TODO-01 | `ImageEncoder.patchify` | [B,3,224,224] to [B,49,3072], patch order preserved |
-| TODO-02 | `MultiHeadAttention.split_heads` | [B,N,D] to [B,H,N,D/H] |
-| TODO-03 | `MultiHeadAttention.__call__` | scores, weighted values, head merge and output projection |
-| TODO-04 | `TransformerBlock.__call__` | attention/MLP calculations and both residual additions |
-| TODO-05 | `ImageEncoder.embed` | patch projection, CLS concatenation and learned positions |
-| TODO-06 | `ImageEncoder.__call__` | select CLS, post-Norm, projection and final output |
-
-Use NumPy array operations, indexing, reshape/transpose, matrix multiplication,
-reductions and broadcasting. Learn the multi-head organization independently.
-The activation and attention-coefficient conversion are already provided.
-
-## What is provided
-
-- `preprocess_image.py`: exact resize, center crop and pixel normalization.
-- `helpers.py`: LayerNorm, exact GELU, attention coefficients and vector scaling.
-- `runtime.py`, `run.py`, `check.py`: loading, command line and reference checks.
-- `weights/image_encoder.npz`: **only the final model's 152 visual tensors**.
-  Original tensor names, shapes and float32 values are preserved. No text weights.
-- `config.json` and `weights/manifest.json`: exact architecture and fingerprints.
-- `assets/images/`, `images.json`: ten local images with stable IDs and provenance.
-- `assets/reference_outputs.npz`: independent FP32 stage/output arrays in ID order.
-
-The config describes this fixed checkpoint. Changing a config number does not
-turn it into another model. Follow the supplied weights and interfaces.
-
-## Numerical checks
-
-`check.py` compares against an independent Torch FP32 forward and the final
-project's teacher reference. Students use only NumPy. Matching means equal shape,
-finite float32 values and `abs(actual-reference) <= atol + rtol*abs(reference)`.
-Output-token tolerance is **atol=2e-5, rtol=2e-4**. Internal token tolerance is
-**atol=2e-4, rtol=2e-4**. Preprocessing uses atol=2e-6. Checks print maximum and
-mean absolute error. `batch` checks changed order and duplicate images.
-
-Useful commands, in implementation order:
-
-```bash
-python check.py --stage patches
-python check.py --stage tokens
-python check.py --stage block0
-python check.py --stage last_tokens
-python check.py --stage output
-python check.py --stage batch
-```
-
-Inspect the targets without changing the provided files:
-
-```python
-import numpy as np
-with np.load("assets/reference_outputs.npz", allow_pickle=False) as ref:
-    print(ref["ids"])
-    print(ref["last_tokens"].shape)    # (10,50,768)
-    print(ref["output_tokens"].shape)  # (10,512)
-```
-
-`PPT-CODE-MAP.txt` maps the lecture excerpts to these exact starter lines.
-
-Read the intermediate arrays to locate the **first** stage that differs. They
-are debugging targets, never inputs to your encoder. Your implementation must
-also handle other images and batch sizes. Do not return cached reference rows.
-
-## Important model conventions
-
-1. Patches are 32x32, so 224/32 gives 7x7 patches. Each patch flattens C,H,W.
-2. Patch projection has **no bias**. It uses `patch_weight.T`.
-3. Attention/MLP linear weights are stored **[out,in]**, so use `weight.T`.
-4. `visual.proj` is already **[in,out] = [768,512]**. Do not transpose it.
-5. Use the supplied exact GELU and Norm epsilon. No parameter updates occur.
-6. The image block has two residual additions. It has no LayerScale parameter.
-
-## Submission
-
-Submit your completed `image_encoder.py`, a short README explaining how to run it,
-and your report. Include per-stage numerical errors and explain one shape change
-and one bug you fixed. Include your contributions and assistance used. Do not
-resubmit the large supplied parameter file or reference data. Assessment follows
-the course's code 30 / report 70 rule and announced interview/deadline policy.
-
-## Reuse in the final project
-
-Copy completed `image_encoder.py` **and the provided `helpers.py`** beside `clip.py` and `text_encoder.py` in the separately distributed final-project
-attachment. Paths are relative to that extracted attachment. `ImageEncoder(weights)`,
-`LayerNorm` and `TransformerBlock(weights,prefix,heads)` keep the required APIs.
-The provided optional causal switch preserves later text-tower compatibility.
-The final project still supplies the full image/text checkpoint and tokenizer.
-Do not substitute these image-only weights for the full multimodal checkpoint.
+这些结果说明给定权重和数据的前向数值复现，不代表下游分类准确率或检索能力。Git 历史保留原始框架和每处填空的真实提交。远程仓库及助教／老师的访问权限待提交时设置。

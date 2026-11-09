@@ -1,0 +1,6 @@
+IDs: image_01, image_02, image_03, image_04, image_05, image_06, image_07, image_08, image_09, image_10
+shape: (10, 512) dtype: float32
+first six: [-0.0398982   0.08501311  0.07988091  0.02134738  0.02104184  0.00043524]
+max norm error: 1.192e-07
+direct reshape first patch max error: 3.241e+00
+direct reshape unequal values: 3002/3072
