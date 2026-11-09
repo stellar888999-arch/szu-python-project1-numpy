@@ -51,7 +51,7 @@ class MultiHeadAttention:
 
         # TODO-03c: output projection, using out_weight and out_bias.
         # Return [B,N,D]. Remember the stored linear-weight orientation.
-        raise NotImplementedError('TODO-03c: project merged attention outputs')
+        return merged @ self.out_weight.T + self.out_bias
 
 
 class TransformerBlock:
