@@ -2,6 +2,6 @@ weights/image_encoder.npz
 __pycache__/
 *.pyc
 .venv/
-output_tokens.npz
+/output_tokens.npz
 report/build/
 tmp/
