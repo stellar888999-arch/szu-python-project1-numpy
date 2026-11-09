@@ -37,7 +37,7 @@ class MultiHeadAttention:
 
         # TODO-03a: query/key comparisons, scaled by sqrt(head_dim).
         # q,k,v: [B,H,N,64]. scores must have [B,H,N,N].
-        raise NotImplementedError('TODO-03a: calculate scores from q and k')
+        scores = (q @ k.swapaxes(-1, -2)) / np.sqrt(np.float32(self.head_dim))
 
         # Given for later text-encoder compatibility. Images use causal=False.
         if causal:
