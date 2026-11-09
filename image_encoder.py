@@ -111,7 +111,7 @@ class ImageEncoder:
         patches = self.patchify(images)  # [B,49,3072]
 
         # TODO-05a: project patches to [B,49,768]. There is no patch bias.
-        raise NotImplementedError('TODO-05a: apply the supplied patch projection')
+        patch_tokens = patches @ self.patch_weight.T
 
         # Given: one supplied CLS row per image.
         cls = np.tile(self.cls, (images.shape[0], 1, 1))
