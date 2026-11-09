@@ -25,7 +25,8 @@ class MultiHeadAttention:
         """
         # TODO-02 contract: [B,N,D] to [B,H,N,D/H].
         # Image model: D=768, H=12, D/H=64.
-        raise NotImplementedError('TODO-02: split the feature axis into heads')
+        b, n, _ = x.shape
+        return x.reshape(b, n, self.heads, self.head_dim).transpose(0, 2, 1, 3)
 
     def __call__(self, x, causal=False):
         # Given: stored linear weights use [out,in]. Parameters stay fixed.
