@@ -46,7 +46,8 @@ class MultiHeadAttention:
 
         # TODO-03b: mix value rows using coefficients; then join head outputs.
         # context: [B,H,N,64], merged: [B,N,D].
-        raise NotImplementedError('TODO-03b: weighted values and merged heads')
+        context = coefficients @ v
+        merged = context.transpose(0, 2, 1, 3).reshape(x.shape)
 
         # TODO-03c: output projection, using out_weight and out_bias.
         # Return [B,N,D]. Remember the stored linear-weight orientation.
