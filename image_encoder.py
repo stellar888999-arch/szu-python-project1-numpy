@@ -70,7 +70,7 @@ class TransformerBlock:
         update = self.attention(self.norm1(x), causal=causal)
 
         # TODO-04a: first residual addition. Name the result residual.
-        raise NotImplementedError('TODO-04a: add the attention update to x')
+        residual = x + update
 
         # Given: the second Norm and the exact checkpoint activation helper.
         u = self.norm2(residual)
