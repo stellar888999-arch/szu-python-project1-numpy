@@ -99,7 +99,9 @@ class ImageEncoder:
         """
         # TODO-01: separate patch-grid axes; reorder; flatten.
         # Input [B,3,224,224], return [B,49,3072].
-        raise NotImplementedError('TODO-01: turn each image into 49 patch rows')
+        b = images.shape[0]
+        grid = images.reshape(b, 3, 7, 32, 7, 32)
+        return grid.transpose(0, 2, 4, 1, 3, 5).reshape(b, 49, 3072)
 
     def embed(self, images):
         patches = self.patchify(images)  # [B,49,3072]
