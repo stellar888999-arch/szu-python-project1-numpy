@@ -40,56 +40,87 @@
 \end{titlepage}
 \setcounter{page}{1}
 
-\section{从一张图像到一行特征}
-本实验用 NumPy 补全课程给定的 ViT-B-32 图像编码器：从一批预处理后的 RGB 图像中，为每张图像生成一行 512 维特征。本次补全了 \code{image_encoder.py} 中的 10 处填空，沿用给定权重、预处理、数值辅助函数和检查程序。实现与实验整理使用了 Codex 辅助。
+\section{逐题实现：从图像块到注意力}
+本实验用 NumPy 完成六组、共十处填空，为每张课程样例图像提取一行 512 维特征。课程提供权重、预处理和辅助函数；实现与实验整理使用了 Codex 辅助。
 
-\subsection{先确定切出来的是哪一块}
-一张 \(224\times224\) 图像能切出 \(7\times7\) 个 \(32\times32\) 块。切块的关键是：\textbf{输出的第 \(7r+c\) 行，必须对应图像第 \(r\) 行、第 \(c\) 列的块}。原数组按通道存储，相邻内存并不等于同一个图像块。直接 reshape 虽然也能得到 49 行，但会把不属于同一块的像素放在一起。因此先拆出网格行、网格列，再把它们移到块内的通道和像素轴之前：
-\[
-[B,3,224,224]\ \to\ [B,3,7,32,7,32]\
-\to\ [B,7,7,3,32,32]\ \to\ [B,49,3072].
-\]
-用首图左上角做对照：直接取三个通道的前 32 行、前 32 列再展平，与参考的第一块完全相同；若直接 reshape，第一块有 3002 个值不同（共 3072 个）。这个反例说明，检查形状只能确认尺寸，不能确认像素来自哪个位置。
+\subsection{TODO-01：切块时怎样保住像素顺序？}
+\textbf{过程与思考。}要让第 \(7r+c\) 行对应网格第 \(r\) 行、第 \(c\) 列的块。先把高、宽各拆成「网格坐标、块内坐标」，得到 \([B,3,7,32,7,32]\)，再用 \((0,2,4,1,3,5)\) 的轴顺序 把两个网格轴移到前面。这样展平后，块按从左到右、从上到下排列，块内按通道、行、列排列。
 
-\subsection{再明确每一次乘法沿哪个轴计算}
-每块的 3072 个值乘 patch 权重转置得到 768 维。把 CLS 放在第 0 行，再加 50 行位置向量，此时后续各层都应保留这 50 个 token 的顺序。注意力把每个 token 的 768 维拆成 12 头，每头 64 维；换轴成 \([B,12,50,64]\) 后，只交换 \(K\) 的最后两轴，计算 \(QK^\top/\sqrt{64}\)。这样得到的每个 \(50\times50\) 矩阵才表示\textbf{同一张图、同一个头内}各 token 的对应分数；softmax 也沿候选 token 轴做。用权重对 \(V\) 加权后，先换回 token 优先再合头，否则维度仍对，行的含义却变了。
+\textbf{核对。}单独切出首图左上 \(32\times32\) 区域并展平，与参考第一块完全相同。反过来直接 reshape 成 \([B,49,3072]\)，形状一样，第一块却有 3002 / 3072 个值不同。尺寸正确不代表索引正确。
 
-第一条残差把注意力更新加到 \(X\)，得到 \(R\)；第二个 LayerNorm 读的是 \(R\)，所以 MLP 的更新也要加回 \(R\)。最后取 \code{tokens[:, 0, :]}，保留 batch 轴并抽取每张图的 CLS。普通线性权重按 \([out,in]\) 存储；最终投影已是 \([768,512]\)，可直接右乘。投影后按行做 \(L_2\) 归一化，得到 \([B,512]\)。
+\subsection{TODO-02：为什么拆头后还要换轴？}
+\textbf{过程与思考。}先把每个 token 的 768 维切成 \(12\times64\)，得到 \([B,50,12,64]\)。矩阵乘法把最后两轴当作矩阵，所以再换成 \([B,12,50,64]\)，让 batch 和 head 都留在矩阵轴之外。每个头处理同一张图的 50 个 token。
+
+\textbf{核对。}换轴后的 \((b,h,t,d)\) 应对应原来的 \((b,t,64h+d)\)。用递增整数填满两张图的测试张量，逐头与原张量切片比较，12 个头全部一致。
+
+\subsection{TODO-03：注意力分数和输出如何对齐？}
+\textbf{过程与思考。}只交换 \(K\) 的最后两轴，再算 \(QK^\top/\sqrt{64}\)。每张图的每个头得到一张 \(50\times50\) 矩阵；一行固定一个 query，所以 softmax 沿 key 轴做，再以该行权重汇总 \(V\)。汇总后先换回 token 优先，再把 12 个头拼回 768 维，最后右乘输出权重转置并加偏置。
+
+\textbf{核对。}分数应为 \([B,12,50,50]\)，合头后回到 \([B,50,768]\)。与 TODO-04 一起用首层参考输出检查；首层最大绝对误差为 \(7.147\times10^{-6}\)。
 
 \newpage
-\section{怎样确认输出正确}
-\subsection{先查中间结果，再看最终输出}
-如果只比较最终向量，发现差异时很难判断从哪里查起。课程检查给出了中间参考，因此按预处理、切块、输入 token、第一层、末层、最终向量的顺序对照。下面保留最能帮助定位问题的几项；完整日志见 \code{evidence/check.txt}。
+\section{逐题实现：从残差到最终特征}
 
-\begin{center}
-\small
-\begin{tabular}{@{}lrl@{}}
-\toprule
-比较位置 & 图像数 & 最大绝对误差\\
-\midrule
-预处理／切块 & 10／2 & 均为 0\\
-输入 token & 2 & \(4.387\times10^{-5}\)\\
-第一层输出 & 2 & \(7.147\times10^{-6}\)\\
-末层 token & 2 & \(4.196\times10^{-5}\)\\
-最终特征 & 10 & \(5.662\times10^{-7}\)\\
-\bottomrule
-\end{tabular}
-\end{center}
+\subsection{TODO-04：第二条残差到底加回谁？}
+\textbf{过程与思考。}先把注意力更新加到原始输入 \(X\)，得到 \(R\)。第二个 LayerNorm 读 \(R\)，它的结果通过线性层扩展到 3072 维，经过 GELU，再投影回 768 维。此时 MLP 计算的是对 \(R\) 的更新，因此第二条捷径也保留 \(R\)，不能改加 \(X\) 或归一化后的 \(R\)：
+\[
+R=X+\operatorname{MHA}(\operatorname{LN}_1(X)),\qquad
+Y=R+\operatorname{MLP}(\operatorname{LN}_2(R)).
+\]
+\textbf{核对。}两条更新的宽度都必须回到 768；首层对照检查整块计算，末层 token 检查误差经过 12 层后是否仍在容差内。
 
-预处理和切块无差异，首个非零误差出现在输入 token 阶段。如果需要定位差异，应该先看这一阶段的投影与位置向量，而不是先改注意力。各阶段均在课程检查的容差内；最后导出的矩阵为 FP32，形状 \([10,512]\)，最大单位范数偏差为 \(1.192\times10^{-7}\)。
+\subsection{TODO-05：先加位置，还是先插 CLS？}
+\textbf{过程与思考。}把每块的 3072 个值乘权重转置，投影到 768 维。先把 CLS 接到 49 个块前面，再按 token 轴加 50 行位置向量：第 0 行位置属于 CLS，第 1 行才属于第一个块。如果先按块加位置，就要额外处理位置索引的偏移。
 
-\subsection{再检查特征是否仍对应原图}
-最后检查的是一个不同的问题：数值算对了，保存时是否还跟着输入顺序？命令行分别传入第 2 张、第 1 张、第 2 张图，检查导出的 ID 和特征行是否都对应默认输出的同一排列，结果一致。这比只看矩阵尺寸更有用：如果导出时打乱了行，或把重复图像去重，单看向量的范数发现不了。以上实验只验证给定样本的前向计算，没有测量特征的分类效果。
+\textbf{核对。}直接对照输入 token 参考。此时尚未进入注意力，出现差异可先查 patch 投影、CLS 顺序和位置对应，不必从最后的特征倒查。
 
-\subsection{如何复现}
-在 Windows CPU、Python 3.12.10、NumPy 2.2.6、Pillow 12.3.0 下实测。将课程包的 \code{weights/image_encoder.npz} 放回项目同名路径，再在项目根目录运行：
+\subsection{TODO-06：如何保留每张图自己的特征？}
+\textbf{过程与思考。}用 \code{tokens[:, 0, :]} 从每张图取 CLS，保留 batch 轴。对它做后置 LayerNorm，再乘 \([768,512]\) 的最终投影；普通线性层权重存为 \([out,in]\)，但这块投影已经是 \([in,out]\)，不用转置。最后按行归一化，而不是对整个 batch 求一个范数。
+
+\textbf{核对。}最终特征必须同时满足三件事：每张图对应一行、和参考数值一致、每行范数接近 1。另用第 2、1、2 张图顺序运行命令行，输出 ID 和特征行都保持了这个顺序，重复图没有被丢掉。
+
+\subsection{复现}
+实测环境为 Windows CPU，Python 3.12.10、NumPy 2.2.6、Pillow 12.3.0。把课程包的 \code{weights/image_encoder.npz} 放到项目同名位置，在项目根目录执行：
 \begin{verbatim}
 python -m pip install -r requirements.txt
 $env:OPENBLAS_NUM_THREADS = '4'
 python check.py --stage all
 python run.py --output evidence/output_tokens.npz
-python evidence/inspect_output.py
+python report/make_effect.py
 \end{verbatim}
+
+\newpage
+\section{运行效果：输入图像与实际特征}
+下面两张图来自课程样例。折线取程序实际导出的对应特征行，只展示前 16 维；两行都完整保存为 512 维，横轴是特征下标，不是图像位置。
+
+\begin{center}
+\begin{minipage}{.44\linewidth}
+\centering\includegraphics[width=\linewidth,height=3.25cm,keepaspectratio]{../assets/images/image_01.jpg}\\[-.15em]
+{\small\ttfamily image\_01}
+\end{minipage}
+\begin{minipage}{.44\linewidth}
+\centering\includegraphics[width=\linewidth,height=3.25cm,keepaspectratio]{../assets/images/image_02.jpg}\\[-.15em]
+{\small\ttfamily image\_02}
+\end{minipage}
+\par\vspace{.3em}
+\input{effect.tex}
+\end{center}
+
+\noindent\textbf{实际导出：}\code{ids} 为 10 个图像 ID；\code{output_tokens} 为 \(10\times512\) 的 FP32 矩阵。课程检查的 8 个阶段全部通过。下表按计算顺序列出关键阶段：
+\begin{center}
+\small
+\begin{tabular}{@{}lrr@{}}
+\toprule
+验证位置 & 图像数 & 最大绝对误差\\
+\midrule
+切块 & 2 & 0\\
+输入 token & 2 & \(4.387\times10^{-5}\)\\
+末层 token & 2 & \(4.196\times10^{-5}\)\\
+最终特征 & 10 & \(5.662\times10^{-7}\)\\
+\bottomrule
+\end{tabular}
+\end{center}
+最终特征的最大单位范数偏差为 \(1.192\times10^{-7}\)。图上两条曲线展示同一程序如何将不同图像映射为不同数值向量；参考对照才是判断实现是否正确的依据。这个实验没有评估分类或检索效果。
 
 \clearpage
 \thispagestyle{empty}
