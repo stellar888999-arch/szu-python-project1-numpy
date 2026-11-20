@@ -1,5 +1,7 @@
 # 小项目 1：NumPy 图像特征提取
 
+仓库地址：[stellar888999-arch/szu-python-project1-numpy](https://github.com/stellar888999-arch/szu-python-project1-numpy)。
+
 用基础 NumPy 补全课程提供的 OpenCLIP ViT-B-32 视觉前向。图像经预处理形成 FP32 [B,3,224,224]；输出 [B,512] 的单位特征向量，保存为包含 ids 与 output_tokens 的 NPZ。内部 [B,50,768] token 序列不等于最终特征。无需 GPU、训练、PyTorch 或 OpenCLIP 软件包。
 
 ## 环境与数据
@@ -38,4 +40,4 @@ python run.py --images assets/images/image_02.jpg assets/images/image_01.jpg --o
 
 课程检查 8 个阶段全部通过。受检预处理和切块与参考完全相同；10 张图最终特征最大绝对误差 5.662e-7，平均绝对误差 8.688e-8，最大单位范数偏差 1.192e-7。换序与重复输入检查通过。直接 reshape 的形状虽正确，但首图第一块有 3002/3072 个值不同，不能仅用形状验证像素顺序。
 
-这些结果说明给定权重和数据的前向数值复现，不代表下游分类准确率或检索能力。Git 历史保留原始框架和每处填空的真实提交。远程仓库及助教／老师的访问权限待提交时设置。
+这些结果说明给定权重和数据的前向数值复现，不代表下游分类准确率或检索能力。Git 历史保留原始框架和每处填空的真实提交。仓库当前为私有，课程提交前需向助教／老师开放访问权限。
