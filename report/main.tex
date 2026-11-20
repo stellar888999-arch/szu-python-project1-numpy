@@ -80,7 +80,7 @@ Y=R+\operatorname{MLP}(\operatorname{LN}_2(R)).
 \textbf{核对。}最终特征必须同时满足三件事：每张图对应一行、和参考数值一致、每行范数接近 1。另用第 2、1、2 张图顺序运行命令行，输出 ID 和特征行都保持了这个顺序，重复图没有被丢掉。
 
 \subsection{复现}
-实测环境为 Windows CPU，Python 3.12.10、NumPy 2.2.6、Pillow 12.3.0。把课程包的 \code{weights/image_encoder.npz} 放到项目同名位置，在项目根目录执行：
+实验在 Windows 11（x64）上运行，模型推理由 CPU 执行。软件版本为 Python 3.12.10、NumPy 2.2.6 和 Pillow 12.3.0。把课程包的 \code{weights/image_encoder.npz} 放到项目同名位置，在项目根目录执行：
 \begin{verbatim}
 python -m pip install -r requirements.txt
 $env:OPENBLAS_NUM_THREADS = '4'
